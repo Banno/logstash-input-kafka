@@ -150,14 +150,12 @@ class LogStash::Inputs::Kafka < LogStash::Inputs::Base
     end
     @kafka_client_queue = SizedQueue.new(@queue_size)
     @consumer_group = create_consumer_group(options)
-    @logger.info('Registering kafka', :group_id => @group_id, :topic_id => @topic_id, :zk_connect => @zk_connect)
   end # def register
 
   public
   def run(logstash_queue)
     # noinspection JRubyStringImportInspection
     java_import 'kafka.common.ConsumerRebalanceFailedException'
-    @logger.info('Running kafka', :group_id => @group_id, :topic_id => @topic_id, :zk_connect => @zk_connect)
     begin
       @consumer_group.run(@consumer_threads,@kafka_client_queue)
 
@@ -177,10 +175,7 @@ class LogStash::Inputs::Kafka < LogStash::Inputs::Base
         queue_event(event, logstash_queue)
       end
 
-      @logger.info('Done running kafka input')
     rescue => e
-      @logger.warn('kafka client threw exception, restarting',
-                   :exception => e)
       Stud.stoppable_sleep(Float(@consumer_restart_sleep_ms) * 1 / 1000) { stop? }
       retry if !stop?
     end
@@ -203,18 +198,16 @@ class LogStash::Inputs::Kafka < LogStash::Inputs::Base
       @codec.decode("#{message_and_metadata.message}") do |event|
         decorate(event)
         if @decorate_events
-          event['kafka'] = {'msg_size' => message_and_metadata.message.size,
+          event.set('kafka', {'msg_size' => message_and_metadata.message.size,
                             'topic' => message_and_metadata.topic,
                             'consumer_group' => @group_id,
                             'partition' => message_and_metadata.partition,
                             'offset' => message_and_metadata.offset,
-                            'key' => message_and_metadata.key}
+                            'key' => message_and_metadata.key})
         end
         output_queue << event
       end # @codec.decode
     rescue => e # parse or event creation error
-      @logger.error('Failed to create event', :message => "#{message_and_metadata.message}", :exception => e,
-                    :backtrace => e.backtrace)
     end # begin
   end # def queue_event
 end #class LogStash::Inputs::Kafka
